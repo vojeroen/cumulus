@@ -1,10 +1,18 @@
-import os
 import uuid
 
-from mongoengine import EmbeddedDocument, StringField, IntField, ReferenceField
+import requests
+from mongoengine import EmbeddedDocument, StringField, IntField, ReferenceField, Document
+from nimbus import config
+from nimbus.client import Client
 from nimbus.helpers.timestamp import get_utc_int
 
+from app.models.error import UploadFailed, DownloadFailed, DeleteFailed
 from app.models.local import LocalFragment
+
+CONNECT_URL = 'tcp://{}:{}'.format(config.get('requests', 'client_hostname'),
+                                   config.get('requests', 'client_port'))
+
+CLIENT = Client(connect=CONNECT_URL)
 
 
 class Fragment(EmbeddedDocument):
@@ -41,20 +49,22 @@ class Fragment(EmbeddedDocument):
         :return: 
         """
         self.hash = self._local_fragment.hash
-
-        # TODO: actual upload
-        with open(os.path.join('cache/fragments', self.uuid), 'wb') as f:
-            f.write(self._local_fragment.read())
+        response = CLIENT.post('file', data={
+            'uuid': self.uuid,
+            'content': self._local_fragment.read()
+        })
+        if response.status_code != requests.codes.ok:
+            raise UploadFailed()
 
     def _download_from_storage(self):
         """
         Download a fragment from the storage.
         :return: LocalFragment
         """
-        # TODO: actual upload
-        open(os.path.join('cache/fragments', self.uuid), 'ab').close()
-        with open(os.path.join('cache/fragments', self.uuid), 'rb') as f:
-            self._local_fragment = LocalFragment(content=f.read(), content_hash=self.hash)
+        response = CLIENT.get('file', parameters={'uuid': self.uuid}, decode_response=False)
+        if response.status_code not in (requests.codes.ok, requests.codes.not_found):
+            raise DownloadFailed()
+        self._local_fragment = LocalFragment(content=response.response[b'content'], content_hash=self.hash)
 
     def verify_full(self):
         """
@@ -73,3 +83,34 @@ class Fragment(EmbeddedDocument):
         """
         # TODO: verdere uitwerking
         pass
+
+
+class OrphanedFragment(Document):
+    uuid = StringField(primary_key=True, required=True)
+    timestamp_created = IntField(required=True)
+    timestamp_orphaned = IntField(required=True, default=get_utc_int)
+    file = ReferenceField('File', required=True)
+    index = IntField(required=True)
+    hash = StringField(required=True)
+    remote = ReferenceField('Hub', required=True)
+
+    @classmethod
+    def create_from(cls, fragment):
+        orphaned_fragment = cls(
+            uuid=fragment.uuid,
+            timestamp_created=fragment.timestamp_created,
+            index=fragment.index,
+            hash=fragment.hash,
+            remote=fragment.remote
+        )
+        return orphaned_fragment
+
+    def remove(self):
+        """
+        Remove the fragment from the remote storage.
+        :return: 
+        """
+        response = CLIENT.delete('file', parameters={'uuid': self.uuid})
+        if response.status_code != requests.codes.ok:
+            raise DeleteFailed()
+        self.delete()

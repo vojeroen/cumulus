@@ -1,5 +1,5 @@
 from app.models.file import File
-from app.models.orphan import OrphanedFragment
+from app.models.fragment import OrphanedFragment
 from app.models.hub import Hub
 
 for file in File.objects:

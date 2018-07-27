@@ -1,4 +1,7 @@
 from app.models.file import File
+from app.models.hub import Hub
+
+hub = Hub.objects.first()
 
 filename = 'fluentpython.pdf'
 file = File.objects.filter(filename=filename).first()

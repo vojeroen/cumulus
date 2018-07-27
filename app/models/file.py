@@ -4,12 +4,11 @@ import uuid
 from mongoengine import EmbeddedDocument, StringField, IntField, Document, ReferenceField, EmbeddedDocumentField, \
     EmbeddedDocumentListField
 from nimbus.helpers.timestamp import get_utc_int
-from pyeclib.ec_iface import ECDriver
+from pyeclib.ec_iface import ECDriver, ECInsufficientFragments
 
-from app.models.error import HashError
-from app.models.fragment import Fragment
+from app.models.error import HashError, ReconstructionError
+from app.models.fragment import Fragment, OrphanedFragment
 from app.models.local import LocalFile
-from app.models.orphan import OrphanedFragment
 
 
 class Collection(EmbeddedDocument):
@@ -35,6 +34,10 @@ class File(Document):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._local_file = None
+
+    def __str__(self):
+        return self.__class__.__name__ + ':' + self.source.cumulus_id + \
+               ':' + self.collection.name + ':' + self.filename
 
     def __enter__(self):
         if self._local_file is not None:
@@ -70,6 +73,10 @@ class File(Document):
         """
         Download the file from the storage. Only the minimum amount of fragments is downloaded to do this.
         """
+        if self.fragments.count() == 0:
+            self._local_file = LocalFile()
+            return
+
         ecd = self._ecdriver()
         fragment_data = []
         for fragment in self.fragments:
@@ -81,10 +88,10 @@ class File(Document):
                 pass
             if len(fragment_data) >= self.encoding.k:
                 break
-        if len(fragment_data) > 0:
+        try:
             self._local_file = LocalFile(content=ecd.decode(fragment_data), content_hash=self.hash)
-        else:
-            self._local_file = LocalFile()
+        except ECInsufficientFragments:
+            raise ReconstructionError('There are not enough fragments to reconstruct {}'.format(self))
 
     def _upload_to_storage(self):
         """
