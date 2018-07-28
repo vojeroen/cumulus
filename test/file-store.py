@@ -1,4 +1,5 @@
 import os
+import time
 import uuid
 
 from app.models.file import File, Collection, Encoding
@@ -12,6 +13,8 @@ hub = Hub.objects.first()
 if hub is None:
     hub = Hub(reference='HUB-' + uuid.uuid4().hex)
     hub.save()
+
+start = time.perf_counter()
 
 file = File()
 file.source = hub
@@ -30,3 +33,7 @@ with open('tmp/fluentpython-retrieved.pdf', 'wb') as f:
 
 if not file_content == retrieved_content:
     print('Error in storage/retrieval')
+
+end = time.perf_counter()
+
+print('elapsed time: {} s'.format(round(end - start, 3)))
