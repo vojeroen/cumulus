@@ -32,7 +32,7 @@ class Fragment(EmbeddedDocument):
         if self.index is None:
             raise ValueError('You must define the index before using the Fragment.')
         if self.remote is None:
-            raise ValueError('You must define the remote before using the Framgent.')
+            raise ValueError('You must define the remote before using the Fragment.')
         self._download_from_storage()
         return self._local_fragment
 
