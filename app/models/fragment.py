@@ -6,13 +6,18 @@ from nimbus import config
 from nimbus.client import Client
 from nimbus.helpers.timestamp import get_utc_int
 
-from app.models.error import UploadFailed, DownloadFailed, DeleteFailed
+from app.models.error import UploadFailed, DownloadFailed, DeleteFailed, InsufficientStorageSpace, RemoteStorageError
 from app.models.local import LocalFragment
 
 CONNECT_URL = 'tcp://{}:{}'.format(config.get('requests', 'client_hostname'),
                                    config.get('requests', 'client_port'))
 
 CLIENT = Client(connect=CONNECT_URL)
+
+
+def store_available_bytes(hub, available_bytes):
+    hub.available_bytes = available_bytes
+    hub.save()
 
 
 class Fragment(EmbeddedDocument):
@@ -37,10 +42,16 @@ class Fragment(EmbeddedDocument):
         return self._local_fragment
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._local_fragment.hash != self.hash:
-            self._upload_to_storage()
-        self._local_fragment.remove()
-        self._local_fragment = None
+        try:
+            if self._local_fragment.hash != self.hash:
+                self._upload_to_storage()
+            self._local_fragment.remove()
+            self._local_fragment = None
+        except RemoteStorageError:
+            # if upload fails: clean up and raise
+            self._local_fragment.remove()
+            self._local_fragment = None
+            raise
 
     def _upload_to_storage(self):
         """
@@ -53,7 +64,13 @@ class Fragment(EmbeddedDocument):
             'uuid': self.uuid,
             'content': self._local_fragment.read()
         })
-        if response.status_code != requests.codes.ok:
+
+        if response.status_code == requests.codes.ok:
+            store_available_bytes(self.remote, response.response['available_bytes'])
+        elif response.status_code == requests.codes.forbidden:
+            store_available_bytes(self.remote, response.response['available_bytes'])
+            raise InsufficientStorageSpace()
+        else:
             raise UploadFailed()
 
     def _download_from_storage(self):
@@ -111,6 +128,10 @@ class OrphanedFragment(Document):
         :return: 
         """
         response = CLIENT.delete('file', parameters={'uuid': self.uuid})
-        if response.status_code != requests.codes.ok:
+
+        if response.status_code == requests.codes.ok:
+            store_available_bytes(self.remote, response.response['available_bytes'])
+        else:
             raise DeleteFailed()
+
         self.delete()

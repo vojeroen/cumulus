@@ -34,24 +34,25 @@ def get_file_path(uuid):
     return os.path.join(STORAGE_DIR, uuid)
 
 
-def get_disk_usage(path):
-    return shutil.disk_usage(path)
+def get_stored_bytes():
+    stored_bytes = 0
+    for dirpath, dirnames, filenames in os.walk(STORAGE_DIR):
+        for filename in filenames:
+            stored_bytes += os.path.getsize(os.path.join(dirpath, filename))
+    return stored_bytes
 
 
-def is_enough_disk_space_available(path, new_file_size):
-    """
-    Verifies if a file of a particular size will fit in path.
-    :param path: path where the new file would be stored
-    :param new_file_size: size of the file to be added in bytes 
-    :return: 
-    """
-    response = True
-    usage = get_disk_usage(path)
-    if (usage.free - new_file_size) <= MINIMUM_FREE_MB * 1024 * 1024:
-        response = False
-    if (usage.free - new_file_size) / usage.total < MINIMUM_FREE_RATIO:
-        response = False
-    return response
+def get_available_bytes():
+    stored_bytes = get_stored_bytes()
+
+    disk_usage = shutil.disk_usage(STORAGE_DIR)
+
+    available_bytes = min([
+        max([0, disk_usage.free - MINIMUM_FREE_MB * 1024 * 1024]),
+        max([0, int(disk_usage.total * (1 - MINIMUM_FREE_RATIO) - stored_bytes)]),
+    ])
+
+    return available_bytes
 
 
 @ctx_request.route('file', methods=['POST'])
@@ -60,11 +61,14 @@ def create_file(request):
     content = request.data[b'content']
     file_path = get_file_path(uuid)
 
-    if is_enough_disk_space_available(os.path.dirname(file_path), len(content)):
+    available_bytes = get_available_bytes()
+
+    if available_bytes > len(content):
         with open(file_path, 'wb') as f:
             f.write(content)
         file_hash = get_hash(file_path)
         status_code = requests.codes.ok
+        available_bytes -= len(content)
     else:
         file_hash = ''
         status_code = requests.codes.forbidden
@@ -73,6 +77,7 @@ def create_file(request):
         {
             'uuid': uuid,
             'hash': file_hash,
+            'available_bytes': available_bytes
         },
         status_code
     )
@@ -133,6 +138,15 @@ def delete_file(request):
 
     return {
         'uuid': uuid,
+        'available_bytes': get_available_bytes(),
+    }
+
+
+@ctx_request.route('stats', methods=['GET'])
+def retrieve_stats(request):
+    return {
+        'available_bytes': get_available_bytes(),
+        'stored_bytes': get_stored_bytes(),
     }
 
 

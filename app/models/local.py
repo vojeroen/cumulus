@@ -34,6 +34,10 @@ class LocalFile:
             hasher.update(chunk)
         return hasher.hexdigest()
 
+    @property
+    def size(self):
+        return os.path.getsize(self._file_path)
+
     def _open(self, mode):
         open(self._file_path, 'ab').close()
         return open(self._file_path, mode)

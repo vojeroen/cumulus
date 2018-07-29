@@ -1,4 +1,5 @@
 import copy
+import random
 import uuid
 
 from mongoengine import EmbeddedDocument, StringField, IntField, Document, ReferenceField, EmbeddedDocumentField, \
@@ -6,9 +7,39 @@ from mongoengine import EmbeddedDocument, StringField, IntField, Document, Refer
 from nimbus.helpers.timestamp import get_utc_int
 from pyeclib.ec_iface import ECDriver, ECInsufficientFragments
 
-from app.models.error import HashError, ReconstructionError
+from app.models.error import HashError, ReconstructionError, NoRemoteStorageLocationFound, RemoteStorageError
 from app.models.fragment import Fragment, OrphanedFragment
+from app.models.hub import Hub
 from app.models.local import LocalFile
+
+
+def select_remote_storage_location(file, size, exclude_locations=None):
+    # naive approach:
+    # - never include the source
+    # - never include explicitly excluded locations
+    # - when there are no valid storage locations anymore, just use already used locations
+
+    base_exclude = {file.source}.union(set(exclude_locations))
+
+    exclude = copy.copy(base_exclude)
+    for fragment in file.fragments:
+        exclude.add(fragment.remote)
+
+    while True:
+        query = Hub.objects \
+            .filter(cumulus_id__nin=[h.cumulus_id for h in exclude]) \
+            .filter(available_bytes__gt=size)
+        hub_count = query.count()
+        if hub_count == 0:
+            if exclude == base_exclude:
+                raise NoRemoteStorageLocationFound
+            else:
+                exclude = copy.copy(base_exclude)
+        else:
+            break
+
+    hub_select = random.randint(0, hub_count - 1)
+    return query[hub_select]
 
 
 class Collection(EmbeddedDocument):
@@ -17,8 +48,8 @@ class Collection(EmbeddedDocument):
 
 class Encoding(EmbeddedDocument):
     name = StringField(required=True)
-    k = IntField(required=True)
-    m = IntField(required=True)
+    k = IntField(required=True)  # number of file pieces
+    m = IntField(required=True)  # number of parity blocks
 
 
 class File(Document):
@@ -54,13 +85,23 @@ class File(Document):
         return self._local_file
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._local_file.hash != self.hash:
+        try:
+            if self._local_file.hash != self.hash:
+                orphan_fragments = self._remove_fragments(delay=True)
+                self._upload_to_storage()
+            else:
+                orphan_fragments = []
+            self._local_file.remove()
+            self._local_file = None
+            self.save()
+            for orphan_fragment in orphan_fragments:
+                orphan_fragment.save()
+        except (RemoteStorageError, NoRemoteStorageLocationFound):
+            # if upload fails: remove previously uploaded fragments, clean up and raise
             self._remove_fragments()
-            self._upload_to_storage()
-            # TODO if upload fails, orphan fragments have to be reset
-        self._local_file.remove()
-        self._local_file = None
-        self.save()
+            self._local_file.remove()
+            self._local_file = None
+            raise
 
     def _ecdriver(self):
         return ECDriver(
@@ -101,23 +142,41 @@ class File(Document):
         """
         self.hash = self._local_file.hash
         ecd = self._ecdriver()
+        exclude_hubs_for_storage = []
         for fragment_index, fragment_data in enumerate(ecd.encode(self._local_file.read())):
-            # TODO intelligently choose the remote hub
-            fragment = Fragment(index=fragment_index, remote=self.source)
-            with fragment as fr:
-                fr.write(fragment_data)
-            self.fragments.append(fragment)
+            while True:
+                remote = select_remote_storage_location(
+                    file=self,
+                    size=int((self._local_file.size / self.encoding.k) * 1.10),
+                    exclude_locations=exclude_hubs_for_storage
+                )
+                fragment = Fragment(index=fragment_index, remote=remote)
+                try:
+                    with fragment as fr:
+                        fr.write(fragment_data)
+                except RemoteStorageError:
+                    exclude_hubs_for_storage.append(remote)
+                    continue
+                self.fragments.append(fragment)
+                break
 
-    def _remove_fragments(self):
+    def _remove_fragments(self, delay=False):
         """
         Remove all fragments from the storage by converting them to orphaned fragments.
         :return: 
         """
+        orphan_fragments = []
         for fragment in copy.copy(self.fragments):
             orphan_fragment = OrphanedFragment.create_from(fragment)
             orphan_fragment.file = self
-            orphan_fragment.save()
+            orphan_fragments.append(orphan_fragment)
             self.fragments.remove(fragment)
+
+        if not delay:
+            for orphan_fragment in orphan_fragments:
+                orphan_fragment.save()
+
+        return orphan_fragments
 
     def verify_full(self):
         """
