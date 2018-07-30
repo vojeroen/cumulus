@@ -1,23 +1,11 @@
 import uuid
 
-import requests
-from mongoengine import EmbeddedDocument, StringField, IntField, ReferenceField, Document
-from nimbus import config
-from nimbus.client import Client
+from mongoengine import EmbeddedDocument, StringField, IntField, ReferenceField, Document, BooleanField
 from nimbus.helpers.timestamp import get_utc_int
 
-from app.models.error import UploadFailed, DownloadFailed, DeleteFailed, InsufficientStorageSpace, RemoteStorageError
-from app.models.local import LocalFragment
-
-CONNECT_URL = 'tcp://{}:{}'.format(config.get('requests', 'client_hostname'),
-                                   config.get('requests', 'client_port'))
-
-CLIENT = Client(connect=CONNECT_URL)
-
-
-def store_available_bytes(hub, available_bytes):
-    hub.available_bytes = available_bytes
-    hub.save()
+from app.models.cache.fragment import CachedFragment, remove_fragment_content, download_fragment_hash
+from app.models.error import RemoteStorageError, \
+    HashError
 
 
 class Fragment(EmbeddedDocument):
@@ -26,80 +14,49 @@ class Fragment(EmbeddedDocument):
     index = IntField(required=True)
     hash = StringField(required=True)
     remote = ReferenceField('Hub', required=True)
+    is_clean = BooleanField(required=True, default=True)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._local_fragment = None
+        self._cache = None
 
     def __enter__(self):
-        if self._local_fragment is not None:
+        if self._cache is not None:
             raise RuntimeError('Cannot use the same Fragment as context manager in its own context.')
         if self.index is None:
             raise ValueError('You must define the index before using the Fragment.')
         if self.remote is None:
             raise ValueError('You must define the remote before using the Fragment.')
-        self._download_from_storage()
-        return self._local_fragment
+        self._cache = CachedFragment(remote=self.remote, uuid=self.uuid, expected_hash=self.hash)
+        return self._cache
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self.hash = self._cache.hash
         try:
-            if self._local_fragment.hash != self.hash:
-                self._upload_to_storage()
-            self._local_fragment.remove()
-            self._local_fragment = None
+            self._cache.close()
         except RemoteStorageError:
             # if upload fails: clean up and raise
-            self._local_fragment.remove()
-            self._local_fragment = None
+            self._cache = None
             raise
-
-    def _upload_to_storage(self):
-        """
-        Upload a local fragment to the storage.
-        :param local_fragment: 
-        :return: 
-        """
-        self.hash = self._local_fragment.hash
-        response = CLIENT.post('file', data={
-            'uuid': self.uuid,
-            'content': self._local_fragment.read()
-        })
-
-        if response.status_code == requests.codes.ok:
-            store_available_bytes(self.remote, response.response['available_bytes'])
-        elif response.status_code == requests.codes.forbidden:
-            store_available_bytes(self.remote, response.response['available_bytes'])
-            raise InsufficientStorageSpace()
         else:
-            raise UploadFailed()
-
-    def _download_from_storage(self):
-        """
-        Download a fragment from the storage.
-        :return: LocalFragment
-        """
-        response = CLIENT.get('file', parameters={'uuid': self.uuid}, decode_response=False)
-        if response.status_code not in (requests.codes.ok, requests.codes.not_found):
-            raise DownloadFailed()
-        self._local_fragment = LocalFragment(content=response.response[b'content'], content_hash=self.hash)
+            self._cache = None
 
     def verify_full(self):
-        """
-        Download the fragment from the storage and verify it with the hash. 
-        Returns True of verification succeeded, False if not.
-        :return: bool
-        """
-        # TODO: verdere uitwerking
-        pass
+        if self._cache is not None:
+            raise RuntimeError('Cannot verify a Fragment when in a context manager.')
+        try:
+            with self as fr:
+                fr.read()
+        except HashError:
+            self.is_clean = False
+        else:
+            self.is_clean = True
+        return self.is_clean
 
     def verify_hash(self):
-        """
-        Request the hash from the storage and verify it.
-        Returns True of verification succeeded, False if not.
-        :return: bool
-        """
-        # TODO: verdere uitwerking
-        pass
+        fragment_hash = download_fragment_hash(self.uuid)
+        self.is_clean = fragment_hash == self.hash
+        return self.is_clean
 
 
 class OrphanedFragment(Document):
@@ -123,15 +80,5 @@ class OrphanedFragment(Document):
         return orphaned_fragment
 
     def remove(self):
-        """
-        Remove the fragment from the remote storage.
-        :return: 
-        """
-        response = CLIENT.delete('file', parameters={'uuid': self.uuid})
-
-        if response.status_code == requests.codes.ok:
-            store_available_bytes(self.remote, response.response['available_bytes'])
-        else:
-            raise DeleteFailed()
-
+        remove_fragment_content(self.remote, self.uuid)
         self.delete()

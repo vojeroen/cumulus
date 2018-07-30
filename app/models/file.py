@@ -5,12 +5,12 @@ import uuid
 from mongoengine import EmbeddedDocument, StringField, IntField, Document, ReferenceField, EmbeddedDocumentField, \
     EmbeddedDocumentListField
 from nimbus.helpers.timestamp import get_utc_int
-from pyeclib.ec_iface import ECDriver, ECInsufficientFragments
+from pyeclib.ec_iface import ECDriverError
 
-from app.models.error import HashError, ReconstructionError, NoRemoteStorageLocationFound, RemoteStorageError
+from app.models.cache.file import CachedFile, ecdriver
+from app.models.error import ReconstructionError, NoRemoteStorageLocationFound, RemoteStorageError, HashError
 from app.models.fragment import Fragment, OrphanedFragment
 from app.models.hub import Hub
-from app.models.local import LocalFile
 
 
 def select_remote_storage_location(file, size, exclude_locations=None):
@@ -64,14 +64,14 @@ class File(Document):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._local_file = None
+        self._cache = None
 
     def __str__(self):
         return self.__class__.__name__ + ':' + self.source.cumulus_id + \
                ':' + self.collection.name + ':' + self.filename
 
     def __enter__(self):
-        if self._local_file is not None:
+        if self._cache is not None:
             raise RuntimeError('Cannot use the same File as context manager in its own context.')
         if self.source is None:
             raise ValueError('You must define the source before using the File.')
@@ -81,73 +81,37 @@ class File(Document):
             raise ValueError('You must define the filename before using the File.')
         if self.encoding is None:
             raise ValueError('You must define the encoding before using the File.')
-        self._download_from_storage()
-        return self._local_file
+        self._cache = CachedFile(encoding=self.encoding, fragments=self.fragments, expected_hash=self.hash)
+        return self._cache
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         try:
-            if self._local_file.hash != self.hash:
+            if self.hash != self._cache.hash:
                 orphan_fragments = self._remove_fragments(delay=True)
-                self._upload_to_storage()
+                self._upload_content()
             else:
                 orphan_fragments = []
-            self._local_file.remove()
-            self._local_file = None
+            self._cache.close()
+            self._cache = None
             self.save()
             for orphan_fragment in orphan_fragments:
                 orphan_fragment.save()
         except (RemoteStorageError, NoRemoteStorageLocationFound):
             # if upload fails: remove previously uploaded fragments, clean up and raise
             self._remove_fragments()
-            self._local_file.remove()
-            self._local_file = None
+            self._cache.remove()
+            self._cache = None
             raise
 
-    def _ecdriver(self):
-        return ECDriver(
-            k=self.encoding.k,
-            m=self.encoding.m,
-            ec_type=self.encoding.name
-        )
-
-    def _download_from_storage(self):
-        """
-        Download the file from the storage. Only the minimum amount of fragments is downloaded to do this.
-        """
-        if self.fragments.count() == 0:
-            self._local_file = LocalFile()
-            return
-
-        ecd = self._ecdriver()
-        fragment_data = []
-        for fragment in self.fragments:
-            try:
-                with fragment as fr:
-                    fragment_data.append(fr.read())
-            except HashError:
-                # TODO mark fragment as dirty to be replaced
-                pass
-            if len(fragment_data) >= self.encoding.k:
-                break
-        try:
-            self._local_file = LocalFile(content=ecd.decode(fragment_data), content_hash=self.hash)
-        except ECInsufficientFragments:
-            raise ReconstructionError('There are not enough fragments to reconstruct {}'.format(self))
-
-    def _upload_to_storage(self):
-        """
-        Split a local file into fragments, assign hubs to these fragments and upload the fragments.
-        :param local_file: 
-        :return: 
-        """
-        self.hash = self._local_file.hash
-        ecd = self._ecdriver()
+    def _upload_content(self):
+        self.hash = self._cache.hash
+        ecd = ecdriver(self.encoding)
         exclude_hubs_for_storage = []
-        for fragment_index, fragment_data in enumerate(ecd.encode(self._local_file.read())):
+        for fragment_index, fragment_data in enumerate(ecd.encode(self._cache.read())):
             while True:
                 remote = select_remote_storage_location(
                     file=self,
-                    size=int((self._local_file.size / self.encoding.k) * 1.10),
+                    size=int((self._cache.size / self.encoding.k) * 1.10),
                     exclude_locations=exclude_hubs_for_storage
                 )
                 fragment = Fragment(index=fragment_index, remote=remote)
@@ -161,10 +125,6 @@ class File(Document):
                 break
 
     def _remove_fragments(self, delay=False):
-        """
-        Remove all fragments from the storage by converting them to orphaned fragments.
-        :return: 
-        """
         orphan_fragments = []
         for fragment in copy.copy(self.fragments):
             orphan_fragment = OrphanedFragment.create_from(fragment)
@@ -178,22 +138,57 @@ class File(Document):
 
         return orphan_fragments
 
+    def reconstruct(self):
+        if self._cache is not None:
+            raise RuntimeError('Cannot call this function when in a context manager.')
+
+        ecd = ecdriver(self.encoding)
+
+        # retrieve data to be used for reconstruction
+        fragment_data = []
+        while True:
+            reconstruction_indexes = [f.index for f in self.fragments.filter(is_clean=False)]
+            try:
+                indexes = ecd.fragments_needed(reconstruction_indexes)
+            except ECDriverError:
+                raise ReconstructionError('There are not enough fragments to reconstruct {}'.format(self))
+            for index in indexes:
+                fragment = self.fragments.filter(index=index).first()
+                try:
+                    with fragment as fr:
+                        fragment_data.append(fr.read())
+                except (RemoteStorageError, HashError):
+                    fragment.is_clean = False
+                    fragment.save()
+            if len(fragment_data) >= len(indexes):
+                break
+
+        # reconstruct
+        reconstruction_data = ecd.reconstruct(fragment_data, reconstruction_indexes)
+        for index, data in zip(reconstruction_indexes, reconstruction_data):
+            fragment = self.fragments.filter(index=index).first()
+            # TODO select another remote for the fragment if necessary
+            fragment.is_clean = True
+            fragment.save()
+            with fragment as fr:
+                fr.write(data)
+
     def verify_full(self):
-        """
-        Verify all fragments fully.
-        Returns True of verification succeeded, False if not.
-        :return: bool 
-        """
-        return all([fragment.verify_full() for fragment in self.fragments])
+        if self._cache is not None:
+            raise RuntimeError('Cannot call this function when in a context manager.')
+        is_clean = all([fragment.verify_full() for fragment in self.fragments])
+        self.save()
+        return is_clean
 
     def verify_hash(self):
-        """
-        Verify the hash of all fragments.
-        Returns True of verification succeeded, False if not.
-        :return: bool
-        """
-        return all([fragment.verify_hash() for fragment in self.fragments])
+        if self._cache is not None:
+            raise RuntimeError('Cannot call this function when in a context manager.')
+        is_clean = all([fragment.verify_hash() for fragment in self.fragments])
+        self.save()
+        return is_clean
 
     def remove(self):
+        if self._cache is not None:
+            raise RuntimeError('Cannot call this function when in a context manager.')
         self._remove_fragments()
         self.delete()

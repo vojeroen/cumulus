@@ -22,9 +22,15 @@ file.collection = Collection(name='nextcloud')
 file.filename = filename
 file.encoding = Encoding(name='liberasurecode_rs_vand', k=2, m=3)
 
+print('Store file')
 with file as f:
     f.write(file_content)
 
+print('Open file without action')
+with file as f:
+    pass
+
+print('Read file')
 with file as f:
     retrieved_content = f.read()
 
