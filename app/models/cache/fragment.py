@@ -1,25 +1,25 @@
 import requests
 
-from app.models.cache import CachedObject, CLIENT
+from app.models.cache import CachedObject, get_client
 from app.models.error import DownloadFailed, InsufficientStorageSpace, UploadFailed, DeleteFailed
 
 
-def download_fragment_hash(fragment_uuid):
-    response = CLIENT.get('hash', parameters={'uuid': fragment_uuid})
+def download_fragment_hash(hub, fragment_uuid):
+    response = get_client().get(hub.cumulus_id + '/hash', parameters={'uuid': fragment_uuid})
     if response.status_code not in (requests.codes.ok, requests.codes.not_found):
         raise DownloadFailed()
     return response.response['hash']
 
 
-def download_fragment_content(fragment_uuid):
-    response = CLIENT.get('file', parameters={'uuid': fragment_uuid}, decode_response=False)
+def download_fragment_content(hub, fragment_uuid):
+    response = get_client().get(hub.cumulus_id + '/file', parameters={'uuid': fragment_uuid}, decode_response=False)
     if response.status_code not in (requests.codes.ok, requests.codes.not_found):
         raise DownloadFailed()
     return response.response[b'content']
 
 
 def upload_fragment_content(hub, fragment_uuid, content):
-    response = CLIENT.post('file', data={
+    response = get_client().post(hub.cumulus_id + '/file', data={
         'uuid': fragment_uuid,
         'content': content
     })
@@ -34,7 +34,7 @@ def upload_fragment_content(hub, fragment_uuid, content):
 
 
 def remove_fragment_content(hub, fragment_uuid):
-    response = CLIENT.delete('file', parameters={'uuid': fragment_uuid})
+    response = get_client().delete(hub.cumulus_id + '/file', parameters={'uuid': fragment_uuid})
 
     if response.status_code == requests.codes.ok:
         store_available_bytes(hub, response.response['available_bytes'])
@@ -54,7 +54,7 @@ class CachedFragment(CachedObject):
         super().__init__(*args, **kwargs)
 
     def download_content(self):
-        content = download_fragment_content(self._uuid)
+        content = download_fragment_content(self._remote, self._uuid)
         self.write(content)
 
     def upload_content(self):

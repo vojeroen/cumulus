@@ -4,6 +4,7 @@ import uuid
 
 from mongoengine import EmbeddedDocument, StringField, IntField, Document, ReferenceField, EmbeddedDocumentField, \
     EmbeddedDocumentListField
+from nimbus.errors import ConnectionTimeoutError
 from nimbus.helpers.timestamp import get_utc_int
 from pyeclib.ec_iface import ECDriverError
 
@@ -118,7 +119,7 @@ class File(Document):
                 try:
                     with fragment as fr:
                         fr.write(fragment_data)
-                except RemoteStorageError:
+                except (RemoteStorageError, ConnectionTimeoutError):
                     exclude_hubs_for_storage.append(remote)
                     continue
                 self.fragments.append(fragment)
@@ -128,7 +129,7 @@ class File(Document):
         orphan_fragments = []
         for fragment in copy.copy(self.fragments):
             orphan_fragment = OrphanedFragment.create_from(fragment)
-            orphan_fragment.file = self
+            orphan_fragment.file = self.uuid
             orphan_fragments.append(orphan_fragment)
             self.fragments.remove(fragment)
 

@@ -22,6 +22,8 @@ file.collection = Collection(name='nextcloud')
 file.filename = filename
 file.encoding = Encoding(name='liberasurecode_rs_vand', k=2, m=3)
 
+print('Source: {}'.format(hub.cumulus_id))
+
 print('Store file')
 with file as f:
     f.write(file_content)

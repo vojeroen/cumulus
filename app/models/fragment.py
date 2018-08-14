@@ -1,6 +1,7 @@
 import uuid
 
 from mongoengine import EmbeddedDocument, StringField, IntField, ReferenceField, Document, BooleanField
+from nimbus.errors import ConnectionTimeoutError
 from nimbus.helpers.timestamp import get_utc_int
 
 from app.models.cache.fragment import CachedFragment, remove_fragment_content, download_fragment_hash
@@ -34,7 +35,7 @@ class Fragment(EmbeddedDocument):
         self.hash = self._cache.hash
         try:
             self._cache.close()
-        except RemoteStorageError:
+        except (RemoteStorageError, ConnectionTimeoutError):
             # if upload fails: clean up and raise
             self._cache = None
             raise
@@ -54,7 +55,7 @@ class Fragment(EmbeddedDocument):
         return self.is_clean
 
     def verify_hash(self):
-        fragment_hash = download_fragment_hash(self.uuid)
+        fragment_hash = download_fragment_hash(self.remote, self.uuid)
         self.is_clean = fragment_hash == self.hash
         return self.is_clean
 
@@ -63,7 +64,7 @@ class OrphanedFragment(Document):
     uuid = StringField(primary_key=True, required=True)
     timestamp_created = IntField(required=True)
     timestamp_orphaned = IntField(required=True, default=get_utc_int)
-    file = ReferenceField('File', required=True)
+    file = StringField(required=True)
     index = IntField(required=True)
     hash = StringField(required=True)
     remote = ReferenceField('Hub', required=True)

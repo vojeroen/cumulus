@@ -4,13 +4,17 @@ import uuid
 from Crypto.Hash import SHA3_256
 from nimbus import config
 from nimbus.client import Client
+from nimbus.errors import ConnectionTimeoutError
 
 from app.models.error import RemoteStorageError, HashError
 
 LOCAL_CACHE = 'cache'
 CONNECT_URL = 'tcp://{}:{}'.format(config.get('requests', 'client_hostname'),
                                    config.get('requests', 'client_port'))
-CLIENT = Client(connect=CONNECT_URL)
+
+
+def get_client():
+    return Client(connect=CONNECT_URL)
 
 
 class CachedObject:
@@ -126,7 +130,7 @@ class CachedObject:
         try:
             if self.hash != self._initial_hash:
                 self._upload_content()
-        except RemoteStorageError:
+        except (RemoteStorageError, ConnectionTimeoutError):
             self.cleanup()
             raise
         else:

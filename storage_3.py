@@ -7,10 +7,10 @@ from nimbus import config
 from nimbus.worker.context import ctx_request
 from nimbus.worker.worker import Worker
 
-STORAGE_DIR = 'cache/storage'
+STORAGE_DIR = 'cache/storage3'
 MINIMUM_FREE_MB = 128
 MINIMUM_FREE_RATIO = 0.01
-IDENTITY = config.get('storage', 'identity')
+IDENTITY = config.get('storage', 'identity-3')
 
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
