@@ -154,10 +154,10 @@ def retrieve_stats(request):
 
 
 def run():
-    response_url = 'tcp://{}:{}'.format(config.get('requests', 'worker_response_hostname'),
-                                        config.get('requests', 'worker_response_port'))
-    control_url = 'tcp://{}:{}'.format(config.get('requests', 'worker_control_hostname'),
-                                       config.get('requests', 'worker_control_port'))
+    response_url = 'tcp://{}:{}'.format(config.get('storage-requests', 'worker_response_hostname'),
+                                        config.get('storage-requests', 'worker_response_port'))
+    control_url = 'tcp://{}:{}'.format(config.get('storage-requests', 'worker_control_hostname'),
+                                       config.get('storage-requests', 'worker_control_port'))
 
     worker = Worker(connect_response=response_url,
                     connect_control=control_url,

@@ -2,9 +2,9 @@ from nimbus import config
 from nimbus.broker import Broker, InvalidEndpoint
 from nimbus.helpers.message import decode
 
-zmq_worker_response_url = 'tcp://{}:{}'.format('*', config.get('requests', 'worker_response_port'))
-zmq_worker_control_url = 'tcp://{}:{}'.format('*', config.get('requests', 'worker_control_port'))
-zmq_client_url = 'tcp://{}:{}'.format('*', config.get('requests', 'client_port'))
+zmq_worker_response_url = 'tcp://{}:{}'.format('*', config.get('storage-requests', 'worker_response_port'))
+zmq_worker_control_url = 'tcp://{}:{}'.format('*', config.get('storage-requests', 'worker_control_port'))
+zmq_client_url = 'tcp://{}:{}'.format('*', config.get('storage-requests', 'client_port'))
 
 redis_host = config.get('redis', 'host')
 redis_port = config.get('redis', 'port')
