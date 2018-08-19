@@ -100,7 +100,7 @@ class File(Document):
         except (RemoteStorageError, NoRemoteStorageLocationFound):
             # if upload fails: remove previously uploaded fragments, clean up and raise
             self._remove_fragments()
-            self._cache.remove()
+            self._cache.close()
             self._cache = None
             raise
 
