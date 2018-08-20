@@ -9,7 +9,7 @@ from nimbus.errors import ConnectionTimeoutError
 from app.models.error import RemoteStorageError, HashError
 
 LOCAL_CACHE = 'cache'
-STORAGE_TIMEOUT = config.get('control', 'seconds_before_storage_timeout')
+STORAGE_TIMEOUT = int(config.get('control', 'seconds_before_storage_timeout'))
 CONNECT_URL = 'tcp://{}:{}'.format(config.get('storage-requests', 'client_hostname'),
                                    config.get('storage-requests', 'client_port'))
 
