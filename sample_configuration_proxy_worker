@@ -1,0 +1,19 @@
+[logging]
+stdout_level = debug
+file_path = nimbus.log
+file_level = debug
+
+[proxy-requests]
+worker_response_hostname = 127.0.0.1
+worker_response_port = 5111
+worker_control_hostname = 127.0.0.1
+worker_control_port = 5112
+
+[storage-requests]
+client_hostname = 127.0.0.1
+client_port = 5100
+
+[control]
+seconds_before_storage_timeout = 2
+seconds_before_contact_check = 10
+seconds_before_disconnect = 2

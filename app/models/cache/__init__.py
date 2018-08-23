@@ -13,6 +13,7 @@ STORAGE_TIMEOUT = int(config.get('control', 'seconds_before_storage_timeout'))
 CONNECT_URL = 'tcp://{}:{}'.format(config.get('storage-requests', 'client_hostname'),
                                    config.get('storage-requests', 'client_port'))
 
+os.makedirs(LOCAL_CACHE, exist_ok=True)
 
 def get_client():
     return Client(connect=CONNECT_URL, timeout=STORAGE_TIMEOUT)
@@ -58,6 +59,8 @@ class CachedObject:
 
     def _download_content(self):
         if not os.path.isfile(self._file_path):
+            with open(self._file_path, 'ab'):
+                pass
             self.download_content()
             self._initial_hash = self.hash
             return True

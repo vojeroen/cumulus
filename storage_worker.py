@@ -5,12 +5,13 @@ import requests
 from Crypto.Hash import SHA3_256
 from nimbus import config
 from nimbus.worker.context import ctx_request
+from nimbus.worker.crypto import WorkerSecurityManager
 from nimbus.worker.worker import Worker
 
-STORAGE_DIR = 'cache/storage2'
+STORAGE_DIR = 'cache/storage'
 MINIMUM_FREE_MB = 128
 MINIMUM_FREE_RATIO = 0.01
-IDENTITY = config.get('storage', 'identity-2')
+IDENTITY = config.get('storage', 'identity')
 
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
@@ -159,9 +160,16 @@ def run():
     control_url = 'tcp://{}:{}'.format(config.get('storage-requests', 'worker_control_hostname'),
                                        config.get('storage-requests', 'worker_control_port'))
 
-    worker = Worker(connect_response=response_url,
-                    connect_control=control_url,
-                    identity=IDENTITY)
+    worker = Worker(
+        connect_response=response_url,
+        connect_control=control_url,
+        identity=IDENTITY,
+        security_manager=WorkerSecurityManager(
+            connection_secret_key=config.get('security', 'connection_secret_key'),
+            connection_broker_public_key=config.get('security', 'connection_broker_public_key'),
+            message_secret_key=config.get('security', 'message_secret_key'),
+            message_public_keys=config.get('security', 'message_public_keys'),
+        ))
 
     worker.run()
 

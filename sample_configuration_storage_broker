@@ -1,0 +1,23 @@
+[logging]
+stdout_level = debug
+file_path = nimbus.log
+file_level = debug
+
+[storage-requests]
+client_hostname = 127.0.0.1
+client_port = 5100
+worker_response_hostname = 127.0.0.1
+worker_response_port = 5101
+worker_control_hostname = 127.0.0.1
+worker_control_port = 5102
+
+[control]
+seconds_before_contact_check = 20
+seconds_before_unregister = 10
+
+[security]
+connection_secret_key = keys/connection-private/storage-broker.key_secret
+connection_public_keys = keys/connection-public
+message_secret_key = keys/message-private/storage-broker.secret.pem
+message_public_keys = keys/message-public
+
