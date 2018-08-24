@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import configparser
 import os
 import shutil
@@ -180,7 +182,7 @@ cd ${CLUSTER_DIR}
 """
 with open('cluster/cluster-start.sh', 'wb') as ofile:
     ofile.write(Template(script.strip()).render(
-        virtualenv='~/virtualenv/cumulus/bin/activate',
+        virtualenv=os.path.join(os.getcwd(), 'venv/bin/activate'),
         dirs=':'.join([os.getcwd(), os.path.join(os.getcwd(), '../nimbus')]),
         files=[
                   ('proxy-broker', 'proxy_broker.py'),

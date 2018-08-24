@@ -1,6 +1,8 @@
 certifi==2018.4.16
 chardet==3.0.4
 idna==2.7
+Jinja2==2.10
+MarkupSafe==1.0
 mongoengine==0.15.3
 msgpack==0.5.6
 pycryptodome==3.6.4
