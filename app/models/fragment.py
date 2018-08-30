@@ -32,7 +32,7 @@ class Fragment(EmbeddedDocument):
         return self._cache
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.hash = self._cache.hash
+        new_hash = self._cache.hash
         try:
             self._cache.close()
         except (RemoteStorageError, ConnectionTimeoutError):
@@ -40,6 +40,7 @@ class Fragment(EmbeddedDocument):
             self._cache = None
             raise
         else:
+            self.hash = new_hash
             self._cache = None
 
     def verify_full(self):
@@ -48,6 +49,8 @@ class Fragment(EmbeddedDocument):
         try:
             with self as fr:
                 fr.read()
+        except ConnectionTimeoutError:
+            self.is_clean = False
         except HashError:
             self.is_clean = False
         else:
@@ -55,8 +58,12 @@ class Fragment(EmbeddedDocument):
         return self.is_clean
 
     def verify_hash(self):
-        fragment_hash = download_fragment_hash(self.remote, self.uuid)
-        self.is_clean = fragment_hash == self.hash
+        try:
+            fragment_hash = download_fragment_hash(self.remote, self.uuid)
+        except ConnectionTimeoutError:
+            self.is_clean = False
+        else:
+            self.is_clean = fragment_hash == self.hash
         return self.is_clean
 
 

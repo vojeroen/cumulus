@@ -2,11 +2,11 @@ import os
 import uuid
 
 from Crypto.Hash import SHA3_256
+
+from app.models.error import RemoteStorageError, HashError
 from nimbus import config
 from nimbus.client import Client
 from nimbus.errors import ConnectionTimeoutError
-
-from app.models.error import RemoteStorageError, HashError
 
 LOCAL_CACHE = 'cache'
 STORAGE_TIMEOUT = int(config.get('control', 'seconds_before_storage_timeout'))
@@ -15,14 +15,16 @@ CONNECT_URL = 'tcp://{}:{}'.format(config.get('storage-requests', 'client_hostna
 
 os.makedirs(LOCAL_CACHE, exist_ok=True)
 
+
 def get_client():
     return Client(connect=CONNECT_URL, timeout=STORAGE_TIMEOUT)
 
 
 class CachedObject:
     def __init__(self, expected_hash=None, file_path=None):
-        self._initial_hash = None
-        self._expected_hash = expected_hash
+        self._expected_hash = expected_hash  # to detect if contents are the same as previously uploaded
+        self._initial_hash = None  # to detect if new contents are the same as initial contents
+        self._is_changed = False  # to detect if there is new content
 
         if file_path is not None:
             self._file_path = file_path
@@ -99,8 +101,8 @@ class CachedObject:
                     break
 
     # WRITE
-    @staticmethod
-    def _write(file_object, content):
+    def _write(self, file_object, content):
+        self._is_changed = True
         if isinstance(content, (bytes, str)):
             # we can't write str, but we'll let the write function handle this
             file_object.write(content)
@@ -132,7 +134,7 @@ class CachedObject:
 
     def close(self):
         try:
-            if self.hash != self._initial_hash:
+            if self._is_changed and self.hash != self._initial_hash:
                 self._upload_content()
         except (RemoteStorageError, ConnectionTimeoutError):
             self.cleanup()
