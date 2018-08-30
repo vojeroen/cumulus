@@ -224,9 +224,9 @@ with open('cluster/cluster-stop.sh', 'wb') as ofile:
     ).encode())
 os.chmod('cluster/cluster-stop.sh', 0o755)
 
-####################################
-# bash script to stop everything #
-####################################
+#####################################
+# bash script to restart everything #
+#####################################
 
 script = """
 #!/bin/bash
