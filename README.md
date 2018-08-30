@@ -23,6 +23,8 @@ The nodes that contain the actual stored data. These nodes may be located anywhe
 * File upload, listing and download.
 * Support for erasure code.
 * Prevent unwanted file modifications while stored in the cluster.
+* Verify integrity of the files stored in the cluster.
+* Reconstruct damaged files.
 * Storage workers don't have to run in a secure network.
 * All connections between the storage broker and storage workers are encrypted and authenticated. 
 
@@ -31,9 +33,9 @@ The nodes that contain the actual stored data. These nodes may be located anywhe
 * No documentation.
 * No user-friendly client.
 * No client authentication.
-* No automated file checking and repair yet (although the file repair algorithm can be launched manually).
 * The brokers are currently single points of failure.
 * Files may not be too large, as they are handled in memory.
+* Sequential instead of parallel file verification and reconstruction.
 
 ## Installation
 
@@ -53,3 +55,11 @@ Run the following command in the project root to initialize and start a new clus
 Use the scripts `cluster/cluster-{start,stop,restart}.sh` to start, stop and restart your cluster.
 
 The file `test/proxy-file-store.py` can be run to upload and download a file to the cluster. There are no additional helpers scripts yet.
+
+## File verification and repair
+File verification and repair needs to be scheduled in a cron job. The following scripts are recommended to be scheduled on a regular basis:
+* `app/tasks/verify/hash-all.py`: checks the hashes of all files stored in the cluster
+* `app/tasks/verify/full-random.py`: selects a random number of files (fraction to be configured), for which all fragments are downloaded and verified
+
+The following script should run every few minutes:
+* `app/tasks/reconstruct.py`: reconstructs all files for which a fragment has failed verification or has not been properly downloaded during normal operations
