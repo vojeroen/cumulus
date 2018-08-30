@@ -6,6 +6,7 @@ from mongoengine import EmbeddedDocument, StringField, IntField, Document, Refer
     EmbeddedDocumentListField
 from pyeclib.ec_iface import ECDriverError
 
+from app.helpers import one
 from app.models.cache.file import CachedFile, ecdriver
 from app.models.error import ReconstructionError, NoRemoteStorageLocationFound, RemoteStorageError, HashError
 from app.models.fragment import Fragment, OrphanedFragment
@@ -41,6 +42,24 @@ def select_remote_storage_location(file, size, exclude_locations=None):
 
     hub_select = random.randint(0, hub_count - 1)
     return query[hub_select]
+
+
+def create_file_fragment(file, index, data, exclude_hubs_for_storage):
+    while True:
+        remote = select_remote_storage_location(
+            file=file,
+            size=int(len(data) * 1.10),
+            exclude_locations=exclude_hubs_for_storage
+        )
+        fragment = Fragment(index=index, remote=remote)
+        try:
+            with fragment as fr:
+                fr.write(data)
+        except (RemoteStorageError, ConnectionTimeoutError):
+            exclude_hubs_for_storage.append(remote)
+            continue
+        break
+    return fragment
 
 
 class Encoding(EmbeddedDocument):
@@ -105,34 +124,25 @@ class File(Document):
         ecd = ecdriver(self.encoding)
         exclude_hubs_for_storage = []
         for fragment_index, fragment_data in enumerate(ecd.encode(self._cache.read())):
-            while True:
-                remote = select_remote_storage_location(
-                    file=self,
-                    size=int((self._cache.size / self.encoding.k) * 1.10),
-                    exclude_locations=exclude_hubs_for_storage
-                )
-                fragment = Fragment(index=fragment_index, remote=remote)
-                try:
-                    with fragment as fr:
-                        fr.write(fragment_data)
-                except (RemoteStorageError, ConnectionTimeoutError):
-                    exclude_hubs_for_storage.append(remote)
-                    continue
-                self.fragments.append(fragment)
-                break
+            self.fragments.append(create_file_fragment(
+                self, fragment_index, fragment_data, exclude_hubs_for_storage
+            ))
+
+    def _remove_fragment(self, index, delay=False):
+        fragment = one(self.fragments.filter(index=index))
+        orphan_fragment = OrphanedFragment.create_from(fragment)
+        orphan_fragment.file = self.uuid
+        self.fragments.remove(fragment)
+
+        if not delay:
+            orphan_fragment.save()
+
+        return orphan_fragment
 
     def _remove_fragments(self, delay=False):
         orphan_fragments = []
-        for fragment in copy.copy(self.fragments):
-            orphan_fragment = OrphanedFragment.create_from(fragment)
-            orphan_fragment.file = self.uuid
-            orphan_fragments.append(orphan_fragment)
-            self.fragments.remove(fragment)
-
-        if not delay:
-            for orphan_fragment in orphan_fragments:
-                orphan_fragment.save()
-
+        for index in [fragment.index for fragment in self.fragments]:
+            orphan_fragments.append(self._remove_fragment(index, delay))
         return orphan_fragments
 
     def reconstruct(self):
@@ -163,12 +173,10 @@ class File(Document):
         # reconstruct
         reconstruction_data = ecd.reconstruct(fragment_data, reconstruction_indexes)
         for index, data in zip(reconstruction_indexes, reconstruction_data):
-            fragment = self.fragments.filter(index=index).first()
-            # TODO select another remote for the fragment if necessary
-            fragment.is_clean = True
-            fragment.save()
-            with fragment as fr:
-                fr.write(data)
+            self._remove_fragment(index)
+            self.fragments.append(create_file_fragment(
+                self, index, data, []
+            ))
 
         self.save()
 

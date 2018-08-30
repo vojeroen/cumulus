@@ -1,4 +1,5 @@
 import os
+import random
 import time
 import uuid
 
@@ -10,7 +11,7 @@ from nimbus.client import Client
 
 filename = 'learningreact1.pdf'
 with open(os.path.join('tmp', filename), 'rb') as f:
-    file_content = f.read()
+    file_content = f.read() + str(random.randint(0, 100)).encode()
 
 CONNECT_URL = 'tcp://{}:{}'.format(config.get('proxy-requests', 'client_hostname'),
                                    config.get('proxy-requests', 'client_port'))
