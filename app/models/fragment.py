@@ -71,6 +71,7 @@ class OrphanedFragment(Document):
     uuid = StringField(primary_key=True, required=True)
     timestamp_created = IntField(required=True)
     timestamp_orphaned = IntField(required=True, default=get_utc_int)
+    reason = StringField(required=True)
     file = StringField(required=True)
     index = IntField(required=True)
     hash = StringField(required=True)

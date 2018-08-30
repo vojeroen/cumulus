@@ -103,7 +103,7 @@ class File(Document):
     def __exit__(self, exc_type, exc_val, exc_tb):
         try:
             if self.hash != self._cache.hash:
-                orphan_fragments = self._remove_fragments(delay=True)
+                orphan_fragments = self._remove_fragments(delay=True, reason='file_content_replaced')
                 self._upload_content()
             else:
                 orphan_fragments = []
@@ -114,7 +114,7 @@ class File(Document):
                 orphan_fragment.save()
         except (RemoteStorageError, NoRemoteStorageLocationFound):
             # if upload fails: remove previously uploaded fragments, clean up and raise
-            self._remove_fragments()
+            self._remove_fragments('file_upload_cancelled')
             self._cache.close()
             self._cache = None
             raise
@@ -128,10 +128,11 @@ class File(Document):
                 self, fragment_index, fragment_data, exclude_hubs_for_storage
             ))
 
-    def _remove_fragment(self, index, delay=False):
+    def _remove_fragment(self, index, delay=False, reason=None):
         fragment = one(self.fragments.filter(index=index))
         orphan_fragment = OrphanedFragment.create_from(fragment)
         orphan_fragment.file = self.uuid
+        orphan_fragment.reason = reason
         self.fragments.remove(fragment)
 
         if not delay:
@@ -139,10 +140,10 @@ class File(Document):
 
         return orphan_fragment
 
-    def _remove_fragments(self, delay=False):
+    def _remove_fragments(self, delay=False, reason=None):
         orphan_fragments = []
         for index in [fragment.index for fragment in self.fragments]:
-            orphan_fragments.append(self._remove_fragment(index, delay))
+            orphan_fragments.append(self._remove_fragment(index, delay, reason))
         return orphan_fragments
 
     def reconstruct(self):
@@ -173,7 +174,7 @@ class File(Document):
         # reconstruct
         reconstruction_data = ecd.reconstruct(fragment_data, reconstruction_indexes)
         for index, data in zip(reconstruction_indexes, reconstruction_data):
-            self._remove_fragment(index)
+            self._remove_fragment(index, reason='reconstructed')
             self.fragments.append(create_file_fragment(
                 self, index, data, []
             ))
@@ -197,5 +198,5 @@ class File(Document):
     def remove(self):
         if self._cache is not None:
             raise RuntimeError('Cannot call this function when in a context manager.')
-        self._remove_fragments()
+        self._remove_fragments(reason='file_removed')
         self.delete()
