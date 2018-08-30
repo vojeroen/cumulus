@@ -13,4 +13,4 @@ worker_control_port = 5112
 
 [control]
 seconds_before_contact_check = 10
-seconds_before_unregister = 2
+seconds_before_unregister = 120

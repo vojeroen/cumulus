@@ -1,6 +1,5 @@
 import os
 import time
-import uuid
 
 import requests
 
@@ -21,22 +20,10 @@ def get_client():
 
 
 hub = Hub.objects.first()
-if hub is None:
-    hub = Hub(reference='HUB-' + uuid.uuid4().hex)
-    hub.save()
 
 start = time.perf_counter()
 
 print('Source: {}'.format(hub.cumulus_id))
-
-print('Store file')
-response = get_client().post(
-    'file',
-    parameters={'source': hub.cumulus_id,
-                'collection': 'nextcloud',
-                'name': filename},
-    data=file_content
-)
 
 print('Read file')
 response = get_client().get(
@@ -49,9 +36,6 @@ response = get_client().get(
 
 if not response.status_code == requests.codes.ok:
     print('Error in storage/retrieval (request)')
-else:
-    if not file_content == response.response[b'content']:
-        print('Error in storage/retrieval (content)')
 
 end = time.perf_counter()
 

@@ -14,6 +14,6 @@ client_hostname = 127.0.0.1
 client_port = 5100
 
 [control]
-seconds_before_storage_timeout = 2
+seconds_before_storage_timeout = 10
 seconds_before_contact_check = 10
-seconds_before_disconnect = 2
+seconds_before_disconnect = 15

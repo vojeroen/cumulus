@@ -74,7 +74,7 @@ for d in [os.path.join(CLUSTER_DIR, 'storage-broker'),
 
 # files
 shutil.copy('sample_configuration_storage_broker',
-            os.path.join(CLUSTER_DIR, 'storage-broker', 'configuration'))
+            os.path.join(CLUSTER_DIR, 'storage-broker', 'configuration.ini'))
 shutil.copy('storage_broker.py',
             os.path.join(CLUSTER_DIR, 'storage-broker', 'storage_broker.py'))
 
@@ -109,7 +109,7 @@ for i in range(NUM_STORAGE_WORKERS):
     config = configparser.ConfigParser()
     config.read('sample_configuration_storage_worker')
     config['storage']['identity'] = new_hubs[i]
-    with open(os.path.join(CLUSTER_DIR, storage_worker_dir, 'configuration'), 'w') as ofile:
+    with open(os.path.join(CLUSTER_DIR, storage_worker_dir, 'configuration.ini'), 'w') as ofile:
         config.write(ofile)
     shutil.copy('storage_worker.py',
                 os.path.join(CLUSTER_DIR, storage_worker_dir, 'storage_worker.py'))
@@ -149,7 +149,7 @@ os.makedirs(os.path.join(CLUSTER_DIR, 'proxy-broker'), exist_ok=True)
 shutil.copy('proxy_broker.py',
             os.path.join(CLUSTER_DIR, 'proxy-broker', 'proxy_broker.py'))
 shutil.copy('sample_configuration_proxy_broker',
-            os.path.join(CLUSTER_DIR, 'proxy-broker', 'configuration'))
+            os.path.join(CLUSTER_DIR, 'proxy-broker', 'configuration.ini'))
 
 #######################
 # set up proxy worker #
@@ -159,7 +159,7 @@ os.makedirs(os.path.join(CLUSTER_DIR, 'proxy-worker'), exist_ok=True)
 shutil.copy('proxy_worker.py',
             os.path.join(CLUSTER_DIR, 'proxy-worker', 'proxy_worker.py'))
 shutil.copy('sample_configuration_proxy_worker',
-            os.path.join(CLUSTER_DIR, 'proxy-worker', 'configuration'))
+            os.path.join(CLUSTER_DIR, 'proxy-worker', 'configuration.ini'))
 
 ####################################
 # bash script to launch everything #
