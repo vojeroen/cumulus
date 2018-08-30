@@ -4,14 +4,14 @@ import uuid
 
 from mongoengine import EmbeddedDocument, StringField, IntField, Document, ReferenceField, EmbeddedDocumentField, \
     EmbeddedDocumentListField
-from nimbus.errors import ConnectionTimeoutError
-from nimbus.helpers.timestamp import get_utc_int
 from pyeclib.ec_iface import ECDriverError
 
 from app.models.cache.file import CachedFile, ecdriver
 from app.models.error import ReconstructionError, NoRemoteStorageLocationFound, RemoteStorageError, HashError
 from app.models.fragment import Fragment, OrphanedFragment
 from app.models.hub import Hub
+from nimbus.errors import ConnectionTimeoutError
+from nimbus.helpers.timestamp import get_utc_int
 
 
 def select_remote_storage_location(file, size, exclude_locations=None):
@@ -65,7 +65,7 @@ class File(Document):
 
     def __str__(self):
         return self.__class__.__name__ + ':' + self.source.cumulus_id + \
-               ':' + self.collection + ':' + self.filename
+               '/' + self.collection + '/' + self.filename
 
     def __enter__(self):
         if self._cache is not None:
@@ -169,6 +169,8 @@ class File(Document):
             fragment.save()
             with fragment as fr:
                 fr.write(data)
+
+        self.save()
 
     def verify_full(self):
         if self._cache is not None:

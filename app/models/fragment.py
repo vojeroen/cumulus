@@ -1,12 +1,12 @@
 import uuid
 
 from mongoengine import EmbeddedDocument, StringField, IntField, ReferenceField, Document, BooleanField
-from nimbus.errors import ConnectionTimeoutError
-from nimbus.helpers.timestamp import get_utc_int
 
 from app.models.cache.fragment import CachedFragment, remove_fragment_content, download_fragment_hash
 from app.models.error import RemoteStorageError, \
     HashError
+from nimbus.errors import ConnectionTimeoutError
+from nimbus.helpers.timestamp import get_utc_int
 
 
 class Fragment(EmbeddedDocument):
