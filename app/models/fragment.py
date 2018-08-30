@@ -13,8 +13,8 @@ class Fragment(EmbeddedDocument):
     uuid = StringField(primary_key=True, default=lambda: uuid.uuid4().hex)
     timestamp_created = IntField(required=True, default=get_utc_int)
     index = IntField(required=True)
-    hash = StringField(required=True)
     remote = ReferenceField('Hub', required=True)
+    hash = StringField(required=True)
     is_clean = BooleanField(required=True, default=True)
 
     def __init__(self, *args, **kwargs):

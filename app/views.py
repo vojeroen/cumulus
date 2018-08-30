@@ -2,7 +2,7 @@ from mongoengine import Q
 from nimbus.worker.context import ctx_request
 from nimbus.worker.errors import MultipleObjectsFound, ObjectDoesNotExist
 
-from app.models.file import File, Collection, Encoding
+from app.models.file import File, Encoding
 from app.models.hub import Hub
 from app.serializers import FileSerializer, FileContentSerializer
 
@@ -25,11 +25,11 @@ def list_files(request):
                    parameters=['source', 'collection', 'name'])
 def post_file(request):
     files = File.objects(Q(source=request.parameters['source']) &
-                         Q(collection__name=request.parameters['collection']) &
+                         Q(collection=request.parameters['collection']) &
                          Q(filename=request.parameters['name'])).all()
     if len(files) == 0:
         file = File()
-        file.collection = Collection(name=request.parameters['collection'])
+        file.collection = request.parameters['collection']
         file.filename = request.parameters['name']
         file.encoding = Encoding(**DEFAULT_ENCODING)
         hubs = Hub.objects(cumulus_id=request.parameters['source'])
@@ -55,7 +55,7 @@ def post_file(request):
                    parameters=['source', 'collection', 'name'])
 def get_file(request):
     files = File.objects(Q(source=request.parameters['source']) &
-                         Q(collection__name=request.parameters['collection']) &
+                         Q(collection=request.parameters['collection']) &
                          Q(filename=request.parameters['name'])).all()
     if len(files) == 0:
         raise ObjectDoesNotExist('File does not exist')

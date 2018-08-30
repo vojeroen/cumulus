@@ -3,7 +3,7 @@ import time
 import uuid
 
 from app.models.error import NoRemoteStorageLocationFound
-from app.models.file import File, Collection, Encoding
+from app.models.file import File, Encoding
 from app.models.fragment import OrphanedFragment
 from app.models.hub import Hub
 
@@ -24,7 +24,7 @@ start = time.perf_counter()
 
 file = File()
 file.source = hub
-file.collection = Collection(name='nextcloud')
+file.collection = 'nextcloud'
 file.filename = filename1
 file.encoding = Encoding(name='liberasurecode_rs_vand', k=2, m=3)
 

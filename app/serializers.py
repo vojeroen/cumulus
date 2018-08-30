@@ -11,7 +11,7 @@ class FileSerializer(Serializer):
             'uuid': self.object.uuid,
             'timestamp_created': self.object.timestamp_created,
             'source': self.object.source.cumulus_id,
-            'collection': self.object.collection.name,
+            'collection': self.object.collection,
             'name': self.object.filename,
             'hash': self.object.hash,
         }

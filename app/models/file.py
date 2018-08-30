@@ -43,10 +43,6 @@ def select_remote_storage_location(file, size, exclude_locations=None):
     return query[hub_select]
 
 
-class Collection(EmbeddedDocument):
-    name = StringField(required=True)
-
-
 class Encoding(EmbeddedDocument):
     name = StringField(required=True)
     k = IntField(required=True)  # number of file pieces
@@ -57,7 +53,7 @@ class File(Document):
     uuid = StringField(primary_key=True, default=lambda: uuid.uuid4().hex)
     timestamp_created = IntField(required=True, default=get_utc_int)
     source = ReferenceField('Hub', required=True)
-    collection = EmbeddedDocumentField(Collection, required=True)
+    collection = StringField(required=True)
     filename = StringField(required=True)
     hash = StringField(required=True)
     encoding = EmbeddedDocumentField(Encoding, required=True)
@@ -69,7 +65,7 @@ class File(Document):
 
     def __str__(self):
         return self.__class__.__name__ + ':' + self.source.cumulus_id + \
-               ':' + self.collection.name + ':' + self.filename
+               ':' + self.collection + ':' + self.filename
 
     def __enter__(self):
         if self._cache is not None:
