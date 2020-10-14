@@ -1,6 +1,10 @@
+**Warning: this repo is unmaintained.**
+
 # Cumulus distributed file storage
 
-This project is currently in early development stages. Not all features are already implemented, and there are still some serious constraints in the usage. The project, and its nimbus dependency, are also not yet properly packaged.
+This project is currently unmaintained. It only reached early development stages and served primarily to test out some concepts. 
+
+Not all features are already implemented, and there are still some serious constraints in the usage. The project, and its nimbus dependency, are also not yet properly packaged.
 
 ## Cluster topology
 There are two different types of nodes: brokers and workers. The brokers are the connection points for new requests and then distribute incoming request over the workers. Multiple workers may be launched in parallel.
